@@ -1,4 +1,4 @@
-services:
+﻿services:
   db:
     image: mcr.microsoft.com/mssql/server:2022-latest
     container_name: cereal-sql
@@ -10,39 +10,22 @@ services:
       - "1433:1433"
     volumes:
       - mssql_data:/var/opt/mssql
-    healthcheck:
-      # Bruger sqlcmd i containeren til "SELECT 1"
-      test: ["CMD-SHELL", "/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P $$MSSQL_SA_PASSWORD -Q 'SELECT 1' || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 30
+    # ingen healthcheck – db-init venter aktivt
 
   db-init:
     image: mcr.microsoft.com/mssql-tools
     depends_on:
       db:
-        condition: service_healthy
+        condition: service_started
     environment:
       SA_PASSWORD: ${SA_PASSWORD}
     volumes:
-      # SQL-mappe har mellemrum → derfor anførselstegn
       - "./Cereal API/SQL Statements:/scripts:ro"
-    entrypoint: ["/bin/bash","-lc"]
-    command: >
-      "
-      set -e;
-      /opt/mssql-tools/bin/sqlcmd -S db -U sa -P $SA_PASSWORD -Q
-      \"IF DB_ID('CerealDb') IS NULL CREATE DATABASE CerealDb;\"
-      &&
-      /opt/mssql-tools/bin/sqlcmd -S db -U sa -P $SA_PASSWORD -d CerealDb -i \"/scripts/Create Table.sql\"
-      &&
-      /opt/mssql-tools/bin/sqlcmd -S db -U sa -P $SA_PASSWORD -d CerealDb -i \"/scripts/Create User Table.sql\"
-      &&
-      /opt/mssql-tools/bin/sqlcmd -S db -U sa -P $SA_PASSWORD -d CerealDb -i \"/scripts/Create User.sql\"
-      &&
-      # Kør ekstra queries hvis filen findes (ellers ignorer fejl)
-      ( /opt/mssql-tools/bin/sqlcmd -S db -U sa -P $SA_PASSWORD -d CerealDb -i \"/scripts/Extra Queries.sql\" || true )
-      "
+      - "./docker/db-init.sh:/init/db-init.sh:ro"
+    entrypoint: ["/bin/bash"]
+    command: ["/init/db-init.sh"]
+
+
 
   api:
     build:
@@ -50,14 +33,14 @@ services:
       dockerfile: Dockerfile
     depends_on:
       db:
-        condition: service_healthy
+        condition: service_started
       db-init:
         condition: service_completed_successfully
+    # Hent JWT osv. fra separat env-fil (se næste afsnit)
+    env_file:
+      - .env.app
     environment:
-      # Bruger least-privilege bruger fra SQL-scripts
       ConnectionStrings__Default: "Server=db,1433;Database=CerealDb;User Id=CerealApiCrudUser;Password=${CRUD_PASSWORD};Encrypt=True;TrustServerCertificate=true;MultipleActiveResultSets=true"
-      # Overstyr JWT-nøglen via env (matcher 'Jwt:SigningKey' i appsettings)
-      Jwt__SigningKey: "${JWT_SECRET}"
       ASPNETCORE_ENVIRONMENT: "Development"
     ports:
       - "8080:8080"

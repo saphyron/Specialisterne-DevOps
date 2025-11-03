@@ -37,8 +37,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      # .env fra GitHub Secrets (ingen hemmeligheder logges)
-      - name: Create .env for compose (from secrets or repo .env)
+      - name: Create .env and .env.app (from secrets)
         shell: bash
         env:
           SA_PASSWORD: ${{ secrets.SA_PASSWORD }}
@@ -46,28 +45,12 @@ jobs:
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
         run: |
           set -euo pipefail
-          if [ -n "${SA_PASSWORD:-}" ] && [ -n "${CRUD_PASSWORD:-}" ] && [ -n "${JWT_SECRET:-}" ]; then
-            {
-              echo "SA_PASSWORD=${SA_PASSWORD}"
-              echo "CRUD_PASSWORD=${CRUD_PASSWORD}"
-              echo "JWT_SECRET=${JWT_SECRET}"
-            } > .env
-            echo ".env created from GitHub Secrets"
-          elif [ -f .env ]; then
-            echo "No secrets set → using checked-in .env (not recommended for real secrets)"
-            # optional: mask values in logs
-            sed -n 's/=.*/=<hidden>/p' .env || true
-          else
-            echo "Missing secrets AND no .env file found at repo root" >&2
-            exit 1
-          fi
+          [ -n "${SA_PASSWORD:-}" ] && [ -n "${CRUD_PASSWORD:-}" ] && [ -n "${JWT_SECRET:-}" ] || { echo "Missing secrets"; exit 1; }
+          printf "SA_PASSWORD=%s\nCRUD_PASSWORD=%s\n" "$SA_PASSWORD" "$CRUD_PASSWORD" > .env
+          printf "Jwt__SigningKey=%s\n" "$JWT_SECRET" > .env.app
+          echo "Wrote .env and .env.app (values hidden)"
 
-          {
-            echo "SA_PASSWORD=${SA_PASSWORD}"
-            echo "CRUD_PASSWORD=${CRUD_PASSWORD}"
-            echo "JWT_SECRET=${JWT_SECRET}"
-          } > .env
-          echo ".env created (values hidden)"
+
 
       - name: Docker Compose up (build)
         run: docker compose up -d --build
@@ -75,20 +58,20 @@ jobs:
       - name: Wait for API health
         shell: bash
         run: |
-          set -e
-          tries=60
-          until [ $tries -le 0 ]; do
-            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/auth/health || true)
-            if [ "$code" = "200" ]; then
-              echo "API healthy (HTTP 200)"
-              exit 0
-            fi
-            tries=$((tries-1))
-            sleep 2
-          done
-          echo "API did not become healthy in time"
-          docker compose logs --no-color > compose-logs.txt || true
-          exit 1
+            set -e
+            tries=120   # var 60
+            until [ $tries -le 0 ]; do
+              code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/auth/health || true)
+              if [ "$code" = "200" ]; then
+                echo "API healthy (HTTP 200)"
+                exit 0
+              fi
+              tries=$((tries-1))
+              sleep 2
+            done
+            echo "API did not become healthy in time"
+            docker compose logs --no-color > compose-logs.txt || true
+            exit 1
 
       - name: Run Smoketest.ps1 (PowerShell)
         shell: pwsh

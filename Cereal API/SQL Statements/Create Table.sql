@@ -6,6 +6,8 @@
 */
 
 -- Grundskema for cereal-rows. Navnefelter er required; øvrige felter kan være NULL.
+IF OBJECT_ID(N'dbo.Cereal', N'U') IS NULL
+BEGIN
 CREATE TABLE dbo.Cereal (
     [name]     nvarchar(100)  NOT NULL, -- Produktravn (unik i kombination med mfr+type)
     [mfr]      nchar(1)       NOT NULL, -- Producentkode (K, G, P, ...)
@@ -24,7 +26,7 @@ CREATE TABLE dbo.Cereal (
     [cups]     float          NULL,
     [rating]   nvarchar(100)  NULL  -- Rating er tekst (ikke float i dette tilfælde)
 );
-
+END
 
 /* 1) Tilføj IDENTITY-kolonne som ny primærnøgle (auto-increment) */
 ALTER TABLE dbo.Cereal
