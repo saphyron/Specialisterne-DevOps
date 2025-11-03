@@ -42,6 +42,7 @@
     environment:
       ConnectionStrings__Default: "Server=db,1433;Database=CerealDb;User Id=CerealApiCrudUser;Password=${CRUD_PASSWORD};Encrypt=True;TrustServerCertificate=true;MultipleActiveResultSets=true"
       ASPNETCORE_ENVIRONMENT: "Development"
+      ASPNETCORE_DETAILEDERRORS: "true"
     ports:
       - "8080:8080"
 

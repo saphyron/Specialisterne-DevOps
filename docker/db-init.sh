@@ -25,7 +25,8 @@ for f in \
   "/scripts/Create Table.sql" \
   "/scripts/Create User Table.sql" \
   "/scripts/Create User.sql" \
-  "/scripts/Extra Queries.sql"
+  "/scripts/Extra Queries.sql" \
+  "/scripts/10_Grants.sql"
 do
   if [ -f "$f" ]; then
     echo "Running: $f"
@@ -34,6 +35,7 @@ do
     echo "Skip (not found): $f"
   fi
 done
+
 
 # Efter-kontrol: findes Users?
 $SQLCMD -S tcp:db,1433 -U sa -P "$SA_PASSWORD" -d CerealDb -Q "SELECT name FROM sys.tables ORDER BY name"

@@ -109,21 +109,20 @@ jobs:
       - name: Collect docker logs (api/db/db-init)
         if: always()
         shell: bash
-        env:
-          SA_PASSWORD: ${{ secrets.SA_PASSWORD }}
         run: |
           set -e
-          docker compose ps > compose-ps.txt
-          docker compose logs --no-color > compose-logs.txt
-          docker compose logs api --no-color > api.log
-          docker compose logs db  --no-color > db.log
-          docker compose logs db-init --no-color > db-init.log
+          docker compose ps > compose-ps.txt || true
+          docker compose logs --no-color > compose-logs.txt || true
+          docker compose logs api --no-color > api.log || true
+          docker compose logs db  --no-color > db.log || true
+          docker compose logs db-init --no-color > db-init.log || true
+
 
       - name: Upload logs & schema
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: smoketest-and-docker-logs
+          name: smoketest-and-docker-logs-${{ github.run_number }}-${{ github.run_attempt }}
           path: |
             ${{ env.SMOKELOG }}
             compose-ps.txt
@@ -133,6 +132,7 @@ jobs:
             db-init.log
             db-tables.txt
             users-columns.txt
+
 
 
 
