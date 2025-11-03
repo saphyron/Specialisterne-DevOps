@@ -54,13 +54,20 @@ jobs:
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Option B: lav owner/repo i lowercase og byg fuld sti til image
-      - name: Compute lowercase repo
+      - name: Compute lowercase image repo
         shell: bash
         run: |
-          echo "REPO_LC=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
-          echo "IMAGE_REPO=${REPO_LC}/cereal-api" >> $GITHUB_ENV
-          echo "REGISTRY=ghcr.io" >> $GITHUB_ENV
+          # GITHUB_REPOSITORY = Owner/Repo (kan indeholde store bogstaver)
+          IMAGE_REPO="${GITHUB_REPOSITORY,,}/cereal-api"
+          echo "IMAGE_REPO=$IMAGE_REPO" >> "$GITHUB_ENV"
+          echo "REGISTRY=ghcr.io" >> "$GITHUB_ENV"
+          echo "Resolved image: ghcr.io/$IMAGE_REPO"
+
+      - name: Debug image vars
+        run: |
+          echo "REGISTRY=${{ env.REGISTRY }}"
+          echo "IMAGE_REPO=${{ env.IMAGE_REPO }}"
+
 
       - name: Build and push image
         uses: docker/build-push-action@v6
