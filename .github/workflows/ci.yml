@@ -93,6 +93,49 @@ jobs:
           git config core.autocrlf false
           & "Cereal API/Scripts/Smoketest.ps1" -BaseUrl 'http://localhost:8080/' -TopTake 5
 
+            - name: Collect DB schema (tables & Users columns)
+        if: always()
+        shell: bash
+        env:
+          SA_PASSWORD: ${{ secrets.SA_PASSWORD }}
+        run: |
+          set -e
+          docker compose ps
+          # Liste alle tabeller
+          docker compose exec -T db /opt/mssql-tools/bin/sqlcmd -S tcp:db,1433 -U sa -P "$SA_PASSWORD" -d CerealDb -Q "SELECT name FROM sys.tables ORDER BY name" > db-tables.txt
+          # Liste Users-kolonner hvis tabellen findes
+          docker compose exec -T db /opt/mssql-tools/bin/sqlcmd -S tcp:db,1433 -U sa -P "$SA_PASSWORD" -d CerealDb -Q "SELECT COLUMN_NAME,DATA_TYPE,IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='Users' ORDER BY ORDINAL_POSITION" > users-columns.txt || true
+
+      - name: Collect docker logs (api/db/db-init)
+        if: always()
+        shell: bash
+        env:
+          SA_PASSWORD: ${{ secrets.SA_PASSWORD }}
+        run: |
+          set -e
+          docker compose ps > compose-ps.txt
+          docker compose logs --no-color > compose-logs.txt
+          docker compose logs api --no-color > api.log
+          docker compose logs db  --no-color > db.log
+          docker compose logs db-init --no-color > db-init.log
+
+      - name: Upload logs & schema
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoketest-and-docker-logs
+          path: |
+            ${{ env.SMOKELOG }}
+            compose-ps.txt
+            compose-logs.txt
+            api.log
+            db.log
+            db-init.log
+            db-tables.txt
+            users-columns.txt
+
+
+
       - name: "Find & verify Smoketest log (must contain OVERALL: PASS)"
         shell: pwsh
         run: |
