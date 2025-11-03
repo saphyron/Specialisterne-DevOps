@@ -87,11 +87,25 @@ jobs:
           echo "API did not become healthy in time"
           exit 1
 
-      - name: Run Smoketest.ps1 (PowerShell 7)
+      - name: Run Smoketest.CI.ps1 (PowerShell 7)
         shell: pwsh
         run: |
           git config core.autocrlf false
-          & "Cereal API/Scripts/Smoketest.CI.ps1" -BaseUrl 'http://localhost:8080/' -TopTake 5
+
+          # Find scriptet robust (case-sensitivt) fra repo-roden
+          $script = Get-ChildItem -Path $env:GITHUB_WORKSPACE -Recurse -Filter 'Smoketest.CI.ps1' -File -ErrorAction SilentlyContinue |
+                    Select-Object -First 1 -ExpandProperty FullName
+
+          if (-not $script) {
+            Write-Host "Kunne ikke finde 'Smoketest.CI.ps1' under $env:GITHUB_WORKSPACE"
+            Write-Host "Top-niveau indehold:"
+            Get-ChildItem -Force $env:GITHUB_WORKSPACE
+            throw "Script not found"
+          }
+
+          Write-Host "Kører: $script"
+          pwsh -NoLogo -NoProfile -File $script -BaseUrl 'http://localhost:8080/' -TopTake 5 -SkipRateLimit
+
 
       # Find seneste smoketest-log og gem sti i GITHUB_ENV
       - name: "Find & verify Smoketest log (must contain OVERALL: PASS)"
