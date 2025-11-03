@@ -30,6 +30,7 @@ jobs:
 
       # Tilføj dotnet test her hvis/naar du har unit/integration tests
 
+
   smoketest:
     needs: build-and-test
     runs-on: ubuntu-latest
@@ -67,6 +68,7 @@ jobs:
           echo ".env.app created"
 
       - name: Docker Compose up (build)
+        shell: bash
         run: docker compose up -d --build
 
       - name: Wait for API health
@@ -89,34 +91,41 @@ jobs:
       - name: Run Smoketest.ps1 (PowerShell)
         shell: pwsh
         run: |
-          # Sikr LF line endings hvis repo er tjekket ud på Windows tidligere
+          # Sikr LF line endings hvis repo har været på Windows
           git config core.autocrlf false
           & "Cereal API/Scripts/Smoketest.ps1" -BaseUrl 'http://localhost:8080/' -TopTake 5
 
-      - name: Collect DB schema (tables & Users columns)
+      # Find seneste smoketest-log og gem sti i GITHUB_ENV
+      - name: "Find & verify Smoketest log (must contain OVERALL: PASS)"
+        shell: pwsh
+        run: |
+          $logs = Get-ChildItem -Recurse -Filter "*Smoketest*.log"
+          if(-not $logs){ Write-Error "No Smoketest log found"; exit 2 }
+          $latest = $logs | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          Write-Host "Latest log: $($latest.FullName)"
+          $content = Get-Content -LiteralPath $latest.FullName -Raw
+          if($content -match 'OVERALL:\s*PASS'){ Write-Host "Smoketest PASS detected" }
+          else { Write-Error "Smoketest did NOT PASS"; Write-Host $content; exit 1 }
+          "SMOKELOG=$($latest.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      # Samlet log- og schema-indsamling (non-fatal) + én artefakt-uploads
+      - name: Collect docker logs & DB schema (always)
         if: always()
         shell: bash
         env:
           SA_PASSWORD: ${{ secrets.SA_PASSWORD }}
         run: |
-          set -e
-          docker compose ps
-          # Liste alle tabeller
-          docker compose exec -T db /opt/mssql-tools/bin/sqlcmd -S tcp:db,1433 -U sa -P "$SA_PASSWORD" -d CerealDb -Q "SELECT name FROM sys.tables ORDER BY name" > db-tables.txt
-          # Liste Users-kolonner hvis tabellen findes
-          docker compose exec -T db /opt/mssql-tools/bin/sqlcmd -S tcp:db,1433 -U sa -P "$SA_PASSWORD" -d CerealDb -Q "SELECT COLUMN_NAME,DATA_TYPE,IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='Users' ORDER BY ORDINAL_POSITION" > users-columns.txt || true
+          set +e
+          { docker compose ps || true; } > compose-ps.txt
+          { docker compose logs --no-color || true; } > compose-logs.txt
+          { docker compose logs api --no-color || true; } > api.log
+          { docker compose logs db  --no-color || true; } > db.log
+          { docker compose logs db-init --no-color || true; } > db-init.log
 
-      - name: Collect docker logs (api/db/db-init)
-        if: always()
-        shell: bash
-        run: |
+          # DB schema (tables + Users kolonner) – non-fatal
+          { docker compose exec -T db /opt/mssql-tools/bin/sqlcmd -S tcp:db,1433 -U sa -P "$SA_PASSWORD" -d CerealDb -Q "SELECT name FROM sys.tables ORDER BY name" || true; } > db-tables.txt
+          { docker compose exec -T db /opt/mssql-tools/bin/sqlcmd -S tcp:db,1433 -U sa -P "$SA_PASSWORD" -d CerealDb -Q "SELECT COLUMN_NAME,DATA_TYPE,IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='Users' ORDER BY ORDINAL_POSITION" || true; } > users-columns.txt
           set -e
-          docker compose ps > compose-ps.txt || true
-          docker compose logs --no-color > compose-logs.txt || true
-          docker compose logs api --no-color > api.log || true
-          docker compose logs db  --no-color > db.log || true
-          docker compose logs db-init --no-color > db-init.log || true
-
 
       - name: Upload logs & schema
         if: always()
@@ -133,49 +142,9 @@ jobs:
             db-tables.txt
             users-columns.txt
 
-
-
-
-      - name: "Find & verify Smoketest log (must contain OVERALL: PASS)"
-        shell: pwsh
-        run: |
-          $logs = Get-ChildItem -Recurse -Filter "*Smoketest*.log"
-          if(-not $logs){ Write-Error "No Smoketest log found"; exit 2 }
-          $latest = $logs | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-          Write-Host "Latest log: $($latest.FullName)"
-          $content = Get-Content -LiteralPath $latest.FullName -Raw
-          if($content -match 'OVERALL:\s*PASS'){ Write-Host "Smoketest PASS detected" }
-          else { Write-Error "Smoketest did NOT PASS"; Write-Host $content; exit 1 }
-          "SMOKELOG=$($latest.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-
-      # Altid hent logs (især nyttigt ved 500-fejl i auth)
-      - name: Collect docker logs (api/db/db-init)
-        if: always()
-        run: |
-          docker compose ps > compose-ps.txt
-          docker compose logs --no-color > compose-logs.txt
-          docker compose logs api --no-color > api.log
-          docker compose logs db  --no-color > db.log
-          docker compose logs db-init --no-color > db-init.log
-          # DB sanity: vis tabeller og om Users findes
-          docker compose exec -T db /opt/mssql-tools/bin/sqlcmd -S tcp:db,1433 -U sa -P "$SA_PASSWORD" -d CerealDb -Q "SELECT name FROM sys.tables" > db-tables.txt
-
-      - name: Upload Smoketest & docker logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: smoketest-and-docker-logs
-          path: |
-            ${{ env.SMOKELOG }}
-            compose-ps.txt
-            compose-logs.txt
-            api.log
-            db.log
-            db-init.log
-            db-tables.txt
-
       - name: Docker Compose down
         if: always()
+        shell: bash
         run: docker compose down -v
 
 

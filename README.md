@@ -60,11 +60,21 @@ root
             Create User Table.sql
             Create User.sql
             Extra Queries.sql
+            10_Grants.sql
         .gitignore
         Cereal API.slnx
         License
         README.md
+    Scripts
+        RunDocker.ps1
+    docker
+        db-init.sh
+    .dockerignore
+    .env
+    .env.app
     .gitignore
     LICENSE
     README.md
+    docker-compose.yml
+    Dockerfile
 ```
