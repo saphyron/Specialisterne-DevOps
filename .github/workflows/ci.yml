@@ -93,7 +93,7 @@ jobs:
           git config core.autocrlf false
           & "Cereal API/Scripts/Smoketest.ps1" -BaseUrl 'http://localhost:8080/' -TopTake 5
 
-            - name: Collect DB schema (tables & Users columns)
+      - name: Collect DB schema (tables & Users columns)
         if: always()
         shell: bash
         env:
