@@ -457,7 +457,9 @@ Run-Test "DELETE /cereals/{key} #1 (200)" {
 # SEKT. 6: OPS import CSV (med auth)
 # =====================================================================
 Write-Title "S6: OPS Import"
-$tempCsv = Join-Path $env:TEMP ("cereal-smoketest-{0}.csv" -f $runId)
+$TempRoot = [System.IO.Path]::GetTempPath()
+if ([string]::IsNullOrWhiteSpace($TempRoot)) { $TempRoot = "/tmp" }  # fallback på Linux
+$tempCsv  = Join-Path $TempRoot ("cereal-smoketest-{0}.csv" -f $runId)
 $csvHeader = "name;mfr;type;calories;protein;fat;sodium;fiber;carbo;sugars;potass;vitamins;shelf;weight;cups;rating"
 $csvTypes  = "String;Categorical;Categorical;Int;Int;Int;Int;Float;Float;Int;Int;Int;Int;Float;Float;String"
 $impName   = "Import One% $runId"; $impMfr="I"; $impType="C"

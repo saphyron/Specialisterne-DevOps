@@ -37,20 +37,34 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Create .env and .env.app (from secrets)
+      # .env til db mv.
+      - name: Create .env for compose (from secrets)
         shell: bash
         env:
           SA_PASSWORD: ${{ secrets.SA_PASSWORD }}
           CRUD_PASSWORD: ${{ secrets.CRUD_PASSWORD }}
+        run: |
+          set -euo pipefail
+          : "${SA_PASSWORD:?Missing SA_PASSWORD}"
+          : "${CRUD_PASSWORD:?Missing CRUD_PASSWORD}"
+          {
+            echo "SA_PASSWORD=${SA_PASSWORD}"
+            echo "CRUD_PASSWORD=${CRUD_PASSWORD}"
+          } > .env
+          echo ".env created"
+
+      # .env.app til API (JWT)
+      - name: Create .env.app for API (from secrets)
+        shell: bash
+        env:
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
         run: |
           set -euo pipefail
-          [ -n "${SA_PASSWORD:-}" ] && [ -n "${CRUD_PASSWORD:-}" ] && [ -n "${JWT_SECRET:-}" ] || { echo "Missing secrets"; exit 1; }
-          printf "SA_PASSWORD=%s\nCRUD_PASSWORD=%s\n" "$SA_PASSWORD" "$CRUD_PASSWORD" > .env
-          printf "Jwt__SigningKey=%s\n" "$JWT_SECRET" > .env.app
-          echo "Wrote .env and .env.app (values hidden)"
-
-
+          : "${JWT_SECRET:?Missing JWT_SECRET}"
+          {
+            echo "Jwt__SigningKey=${JWT_SECRET}"
+          } > .env.app
+          echo ".env.app created"
 
       - name: Docker Compose up (build)
         run: docker compose up -d --build
@@ -58,61 +72,69 @@ jobs:
       - name: Wait for API health
         shell: bash
         run: |
-            set -e
-            tries=120   # var 60
-            until [ $tries -le 0 ]; do
-              code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/auth/health || true)
-              if [ "$code" = "200" ]; then
-                echo "API healthy (HTTP 200)"
-                exit 0
-              fi
-              tries=$((tries-1))
-              sleep 2
-            done
-            echo "API did not become healthy in time"
-            docker compose logs --no-color > compose-logs.txt || true
-            exit 1
+          set -e
+          tries=60
+          until [ $tries -le 0 ]; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/auth/health || true)
+            if [ "$code" = "200" ]; then
+              echo "API healthy (HTTP 200)"
+              exit 0
+            fi
+            tries=$((tries-1))
+            sleep 2
+          done
+          echo "API did not become healthy in time"
+          exit 1
 
       - name: Run Smoketest.ps1 (PowerShell)
         shell: pwsh
         run: |
+          # Sikr LF line endings hvis repo er tjekket ud på Windows tidligere
+          git config core.autocrlf false
           & "Cereal API/Scripts/Smoketest.ps1" -BaseUrl 'http://localhost:8080/' -TopTake 5
 
       - name: "Find & verify Smoketest log (must contain OVERALL: PASS)"
         shell: pwsh
         run: |
           $logs = Get-ChildItem -Recurse -Filter "*Smoketest*.log"
-          if(-not $logs){
-            Write-Error "No Smoketest log found"
-            exit 2
-          }
+          if(-not $logs){ Write-Error "No Smoketest log found"; exit 2 }
           $latest = $logs | Sort-Object LastWriteTime -Descending | Select-Object -First 1
           Write-Host "Latest log: $($latest.FullName)"
           $content = Get-Content -LiteralPath $latest.FullName -Raw
-          if($content -match 'OVERALL:\s*PASS'){
-            Write-Host "Smoketest PASS detected"
-          } else {
-            Write-Error "Smoketest did NOT PASS"
-            Write-Host "---- LOG START ----"
-            Write-Host $content
-            Write-Host "---- LOG END ----"
-            exit 1
-          }
+          if($content -match 'OVERALL:\s*PASS'){ Write-Host "Smoketest PASS detected" }
+          else { Write-Error "Smoketest did NOT PASS"; Write-Host $content; exit 1 }
           "SMOKELOG=$($latest.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
-      - name: Upload Smoketest logs
+      # Altid hent logs (især nyttigt ved 500-fejl i auth)
+      - name: Collect docker logs (api/db/db-init)
+        if: always()
+        run: |
+          docker compose ps > compose-ps.txt
+          docker compose logs --no-color > compose-logs.txt
+          docker compose logs api --no-color > api.log
+          docker compose logs db  --no-color > db.log
+          docker compose logs db-init --no-color > db-init.log
+          # DB sanity: vis tabeller og om Users findes
+          docker compose exec -T db /opt/mssql-tools/bin/sqlcmd -S tcp:db,1433 -U sa -P "$SA_PASSWORD" -d CerealDb -Q "SELECT name FROM sys.tables" > db-tables.txt
+
+      - name: Upload Smoketest & docker logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: smoketest-logs
+          name: smoketest-and-docker-logs
           path: |
             ${{ env.SMOKELOG }}
-            **/*Smoketest*.log
+            compose-ps.txt
             compose-logs.txt
+            api.log
+            db.log
+            db-init.log
+            db-tables.txt
 
       - name: Docker Compose down
         if: always()
         run: docker compose down -v
+
 
   docker:
     needs: smoketest   # push kun hvis smoketest består
