@@ -1,0 +1,196 @@
+name: ci
+
+on:
+  push:
+    branches: [ main, dev, Init-DevOps ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup .NET 9 SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Restore
+        run: dotnet restore "Cereal API/Cereal API/Cereal API.csproj"
+
+      - name: Build (Release)
+        run: dotnet build "Cereal API/Cereal API/Cereal API.csproj" -c Release --no-restore
+
+
+
+  smoketest:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      # .env til db mv.
+      - name: Create .env for compose (from secrets)
+        shell: bash
+        env:
+          SA_PASSWORD: ${{ secrets.SA_PASSWORD }}
+          CRUD_PASSWORD: ${{ secrets.CRUD_PASSWORD }}
+        run: |
+          set -euo pipefail
+          : "${SA_PASSWORD:?Missing SA_PASSWORD}"
+          : "${CRUD_PASSWORD:?Missing CRUD_PASSWORD}"
+          {
+            echo "SA_PASSWORD=${SA_PASSWORD}"
+            echo "CRUD_PASSWORD=${CRUD_PASSWORD}"
+          } > .env
+          echo ".env created"
+
+      # .env.app til API (JWT)
+      - name: Create .env.app for API (from secrets)
+        shell: bash
+        env:
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+        run: |
+          set -euo pipefail
+          : "${JWT_SECRET:?Missing JWT_SECRET}"
+          {
+            echo "Jwt__SigningKey=${JWT_SECRET}"
+          } > .env.app
+          echo ".env.app created"
+
+      - name: Docker Compose up (build)
+        shell: bash
+        run: docker compose up -d --build
+
+      - name: Wait for API health
+        shell: bash
+        run: |
+          set -e
+          tries=60
+          until [ $tries -le 0 ]; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/auth/health || true)
+            if [ "$code" = "200" ]; then
+              echo "API healthy (HTTP 200)"
+              exit 0
+            fi
+            tries=$((tries-1))
+            sleep 2
+          done
+          echo "API did not become healthy in time"
+          exit 1
+
+      - name: Run Smoketest.CI.ps1 (PowerShell 7)
+        shell: pwsh
+        run: |
+          git config core.autocrlf false
+
+          # Find scriptet robust (case-sensitivt) fra repo-roden
+          $script = Get-ChildItem -Path $env:GITHUB_WORKSPACE -Recurse -Filter 'Smoketest.CI.ps1' -File -ErrorAction SilentlyContinue |
+                    Select-Object -First 1 -ExpandProperty FullName
+
+          if (-not $script) {
+            Write-Host "Kunne ikke finde 'Smoketest.CI.ps1' under $env:GITHUB_WORKSPACE"
+            Write-Host "Top-niveau indehold:"
+            Get-ChildItem -Force $env:GITHUB_WORKSPACE
+            throw "Script not found"
+          }
+
+          Write-Host "Kører: $script"
+          pwsh -NoLogo -NoProfile -File $script -BaseUrl 'http://localhost:8080/' -TopTake 5 -SkipRateLimit
+
+
+      # Find seneste smoketest-log og gem sti i GITHUB_ENV
+      - name: "Find & verify Smoketest log (must contain OVERALL: PASS)"
+        shell: pwsh
+        run: |
+          $logs = Get-ChildItem -Recurse -Filter "*Smoketest*.log"
+          if(-not $logs){ Write-Error "No Smoketest log found"; exit 2 }
+          $latest = $logs | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          Write-Host "Latest log: $($latest.FullName)"
+          $content = Get-Content -LiteralPath $latest.FullName -Raw
+          if($content -match 'OVERALL:\s*PASS'){ Write-Host "Smoketest PASS detected" }
+          else { Write-Error "Smoketest did NOT PASS"; Write-Host $content; exit 1 }
+          "SMOKELOG=$($latest.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      # Samlet log- og schema-indsamling (non-fatal) + én artefakt-uploads
+      - name: Collect docker logs & DB schema (always)
+        if: always()
+        shell: bash
+        env:
+          SA_PASSWORD: ${{ secrets.SA_PASSWORD }}
+        run: |
+          set +e
+          { docker compose ps || true; } > compose-ps.txt
+          { docker compose logs --no-color || true; } > compose-logs.txt
+          { docker compose logs api --no-color || true; } > api.log
+          { docker compose logs db  --no-color || true; } > db.log
+          { docker compose logs db-init --no-color || true; } > db-init.log
+
+          # DB schema (tables + Users kolonner) – non-fatal
+          { docker compose exec -T db /opt/mssql-tools/bin/sqlcmd -S tcp:db,1433 -U sa -P "$SA_PASSWORD" -d CerealDb -Q "SELECT name FROM sys.tables ORDER BY name" || true; } > db-tables.txt
+          { docker compose exec -T db /opt/mssql-tools/bin/sqlcmd -S tcp:db,1433 -U sa -P "$SA_PASSWORD" -d CerealDb -Q "SELECT COLUMN_NAME,DATA_TYPE,IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='Users' ORDER BY ORDINAL_POSITION" || true; } > users-columns.txt
+          set -e
+
+      - name: Upload logs & schema
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoketest-and-docker-logs-${{ github.run_number }}-${{ github.run_attempt }}
+          path: |
+            ${{ env.SMOKELOG }}
+            compose-ps.txt
+            compose-logs.txt
+            api.log
+            db.log
+            db-init.log
+            db-tables.txt
+            users-columns.txt
+
+      - name: Docker Compose down
+        if: always()
+        shell: bash
+        run: docker compose down -v
+
+
+  docker:
+    needs: smoketest   # push kun hvis smoketest består
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Docker login (GHCR)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Compute lowercase image repo
+        shell: bash
+        run: |
+          IMAGE_REPO="${GITHUB_REPOSITORY,,}/cereal-api"
+          echo "IMAGE_REPO=$IMAGE_REPO" >> "$GITHUB_ENV"
+          echo "REGISTRY=ghcr.io" >> "$GITHUB_ENV"
+          echo "Resolved image: ghcr.io/$IMAGE_REPO"
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_REPO }}:sha-${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_REPO }}:latest

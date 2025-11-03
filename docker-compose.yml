@@ -1,0 +1,49 @@
+﻿services:
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: cereal-sql
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${SA_PASSWORD}
+      MSSQL_PID: Developer
+    ports:
+      - "1433:1433"
+    volumes:
+      - mssql_data:/var/opt/mssql
+
+  db-init:
+    image: mcr.microsoft.com/mssql-tools
+    depends_on:
+      db:
+        condition: service_started
+    environment:
+      SA_PASSWORD: ${SA_PASSWORD}
+    volumes:
+      - "./Cereal API/SQL Statements:/scripts:ro"
+      - "./docker/db-init.sh:/init/db-init.sh:ro"
+    entrypoint: ["/bin/bash"]
+    command: ["/init/db-init.sh"]
+
+
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      db:
+        condition: service_started
+      db-init:
+        condition: service_completed_successfully
+    # Hent JWT osv. fra separat env-fil
+    env_file:
+      - .env.app
+    environment:
+      ConnectionStrings__Default: "Server=db,1433;Database=CerealDb;User Id=CerealApiCrudUser;Password=${CRUD_PASSWORD};Encrypt=True;TrustServerCertificate=true;MultipleActiveResultSets=true"
+      ASPNETCORE_ENVIRONMENT: "Development"
+      ASPNETCORE_DETAILEDERRORS: "true"
+    ports:
+      - "8080:8080"
+
+volumes:
+  mssql_data:
