@@ -10,7 +10,6 @@
       - "1433:1433"
     volumes:
       - mssql_data:/var/opt/mssql
-    # ingen healthcheck – db-init venter aktivt
 
   db-init:
     image: mcr.microsoft.com/mssql-tools
@@ -36,7 +35,7 @@
         condition: service_started
       db-init:
         condition: service_completed_successfully
-    # Hent JWT osv. fra separat env-fil (se næste afsnit)
+    # Hent JWT osv. fra separat env-fil
     env_file:
       - .env.app
     environment:

@@ -2,7 +2,7 @@
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 WORKDIR /src
 
-# Kopiér csproj (med mellemrum i stier) og restore som separat lag
+# Kopiér csproj og restore som separat lag
 COPY ["Cereal API/Cereal API/Cereal API.csproj", "Cereal API/Cereal API/"]
 RUN dotnet restore "Cereal API/Cereal API/Cereal API.csproj"
 

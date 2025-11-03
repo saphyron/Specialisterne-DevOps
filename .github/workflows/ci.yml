@@ -28,7 +28,6 @@ jobs:
       - name: Build (Release)
         run: dotnet build "Cereal API/Cereal API/Cereal API.csproj" -c Release --no-restore
 
-      # Tilføj dotnet test her hvis/naar du har unit/integration tests
 
 
   smoketest:
@@ -88,12 +87,11 @@ jobs:
           echo "API did not become healthy in time"
           exit 1
 
-      - name: Run Smoketest.ps1 (PowerShell)
+      - name: Run Smoketest.ps1 (PowerShell 7)
         shell: pwsh
         run: |
-          # Sikr LF line endings hvis repo har været på Windows
           git config core.autocrlf false
-          & "Cereal API/Scripts/Smoketest.ps1" -BaseUrl 'http://localhost:8080/' -TopTake 5
+          & "Cereal API/Scripts/Smoketest.CI.ps1" -BaseUrl 'http://localhost:8080/' -TopTake 5
 
       # Find seneste smoketest-log og gem sti i GITHUB_ENV
       - name: "Find & verify Smoketest log (must contain OVERALL: PASS)"
