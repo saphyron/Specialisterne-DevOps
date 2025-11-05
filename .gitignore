@@ -265,3 +265,6 @@ history/
 *.msp
 # JetBrains Rider
 *.sln.iml
+# docs
+docs/_site/*
+docs/api/*

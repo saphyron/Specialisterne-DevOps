@@ -1,0 +1,8 @@
+- name: Introduktion
+  href: index.md
+- name: Guides
+  items:
+  - name: Kom i gang
+    href: articles/getting-started.md
+- name: API Reference
+  href: api/
