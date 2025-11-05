@@ -27,8 +27,10 @@ namespace CerealAPI.Endpoints.Ops
         /// </remarks>
         public static IEndpointRouteBuilder MapOpsEndpoints(this IEndpointRouteBuilder app)
         {
+            /* Old version using HttpRequest and IFormCollection
+            /  Virker ikke i docker.
             // POST /ops/import-csv  — multipart/form-data (felt: "file")
-            app.MapPost("/ops/import-csv", async (HttpRequest req, CerealAPI.Data.SqlConnectionCeral cereal) =>
+             async (HttpRequest req, CerealAPI.Data.SqlConnectionCeral cereal) =>
             {
                 // Valider content-type og hent filen
                 if (!req.HasFormContentType)
@@ -47,7 +49,7 @@ namespace CerealAPI.Endpoints.Ops
                 // Opret SqlConnection og forbered DataTable for bulk insert
                 using var conn = (SqlConnection)cereal.Create();
                 await conn.OpenAsync();
-
+app.MapPost("/ops/import-csv",
                 var table = ToDataTable(cereals);
                 // Hurtig masseindsættelse: 1:1-kolonnemapping til dbo.Cereal
                 using var bulk = new SqlBulkCopy(conn)
@@ -82,7 +84,38 @@ namespace CerealAPI.Endpoints.Ops
             .WithDescription("Forventer semikolon-separeret CSV med 2. linje som datatype-linje.");
 
             return app;
+        }*/
+            // POST /ops/import-csv  — multipart/form-data (felt: "file")
+            app.MapPost("/ops/import-csv", async (IFormFile file, CerealAPI.Data.SqlConnectionCeral cereal) =>
+            {
+                if (file is null || file.Length == 0)
+                    return Results.BadRequest("Missing file.");
+
+                using var stream = file.OpenReadStream();
+                var cereals = CsvParser.ParseCereal(stream);
+                if (cereals.Count == 0)
+                    return Results.BadRequest("No rows found.");
+
+                using var conn = (SqlConnection)cereal.Create();
+                await conn.OpenAsync();
+
+                var table = ToDataTable(cereals);
+                using var bulk = new SqlBulkCopy(conn) { DestinationTableName = "dbo.Cereal" };
+                // ... column mappings ...
+                await bulk.WriteToServerAsync(table);
+
+                return Results.Ok(new { inserted = cereals.Count });
+            })
+            .DisableAntiforgery()
+            .WithTags("Ops")
+            .Accepts<IFormFile>("multipart/form-data")       // <— tydeliggør for Swagger
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .WithSummary("Import Cereal.csv")
+            .WithDescription("Upload semicolon-separeret CSV (2. linje: datatype).");
+            return app;
         }
+
         /// <summary>
         /// Konverterer en liste af <see cref="Cereal"/> til en <see cref="DataTable"/> klar til <see cref="SqlBulkCopy"/>.
         /// </summary>

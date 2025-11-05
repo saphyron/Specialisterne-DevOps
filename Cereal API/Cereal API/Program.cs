@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using System.Threading.RateLimiting;
+using Microsoft.OpenApi.Models; 
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -94,11 +95,46 @@ builder.Services.AddAuthorization(opt =>
 });
 
 // ------------------------------------------------------------
-// OPENAPI
-// - Genererer endpoints til Swagger/OpenAPI i dev.
+// OPENAPI / SWAGGER (Swashbuckle)
 // ------------------------------------------------------------
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddOpenApi();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "Cereal API",
+        Version = "v1",
+        Description = "HTTP endpoints for Cereal API"
+    });
+
+    // JWT bearer button in Swagger UI
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "Enter: Bearer {your JWT token}"
+    });
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
+            },
+            Array.Empty<string>()
+        }
+    });
+
+    // XML comments (safe include if file exists)
+    var xml = Path.Combine(AppContext.BaseDirectory, $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml");
+    if (File.Exists(xml))
+    {
+        c.IncludeXmlComments(xml, includeControllerXmlComments: true);
+    }
+});
 
 // ------------------------------------------------------------
 // DI KONFIGURATION
@@ -118,16 +154,26 @@ var app = builder.Build();
 // - HSTS i ikke-dev.
 // - HTTPS-redirect, RateLimiter, AuthN/Z og request logging.
 // ------------------------------------------------------------
-if (app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>("Swagger:Enabled"))
 {
-    app.MapOpenApi();
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Cereal API v1");
+        // c.RoutePrefix = "docs"; // uncomment to serve at /docs instead of /swagger
+    });
 }
 else
 {
-    app.UseHsts(); // kun prod/stage
+    app.UseHsts();
 }
 
-app.UseHttpsRedirection();
+// only redirect in non-Development (or when you actually expose HTTPS)
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
+
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
