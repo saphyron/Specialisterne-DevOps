@@ -40,14 +40,14 @@ jobs:
         run: |
           $dll = "Cereal API/Cereal API/bin/Release/net9.0/Cereal API.dll"
           if (-not (Test-Path $dll)) { Write-Error "DLL not found: $dll"; exit 1 }
-          Get-ChildItem "Cereal API/Cereal API/bin/Release/net9.0" | Select-Object FullName,Length,LastWriteTime
+          Write-Host "Found: $dll"
 
       # 2) Install DocFX (local tool) and generate metadata from the DLL (assembly-mode)
       - name: Install DocFX (dotnet tool)
         run: dotnet tool install docfx --tool-path .\.tools
 
       - name: DocFX metadata (assembly-mode → docs/api)
-        run: .\.tools\docfx metadata "Cereal API/Cereal API/bin/Release/net9.0/Cereal API.dll" --output docs\api --logLevel info
+        run: .\.tools\docfx metadata docs\docfx.json --logLevel info
 
 
       # Fail if docs/api is empty
@@ -56,10 +56,11 @@ jobs:
         run: |
           $count = (Get-ChildItem -Recurse docs/api -Filter *.yml -ErrorAction SilentlyContinue | Measure-Object).Count
           if ($count -lt 1) { Write-Error "No YAML generated under docs/api"; exit 1 }
+          Get-ChildItem docs/api -Recurse -Filter *.yml | Select-Object -First 5
 
       # 3) Build DocFX site and upload to Pages
       - name: DocFX build
-        run: .\.tools\docfx build docs\docfx.json
+        run: .\.tools\docfx build docs\docfx.json --logLevel info
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
