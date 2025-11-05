@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
-set -euo pipefail
+#set -eu pipefail
+set -eu
+( set -o pipefail ) 2>/dev/null && set -o pipefail
+
 
 SQLCMD=$(/usr/bin/which /opt/mssql-tools18/bin/sqlcmd || /usr/bin/which /opt/mssql-tools/bin/sqlcmd || echo "")
 if [ -z "$SQLCMD" ]; then echo "sqlcmd not found"; exit 2; fi
 echo "Using sqlcmd: $SQLCMD"
 
-# Vent på SQL
+# Vent pÃ¥ SQL
 for n in $(seq 1 120); do
   if $SQLCMD -S tcp:db,1433 -U sa -P "$SA_PASSWORD" -Q "SELECT 1" >/dev/null 2>&1; then
     break
@@ -13,14 +16,14 @@ for n in $(seq 1 120); do
   echo "Waiting for SQL Server (attempt $n)..."; sleep 2
 done
 
-# Debug: se scripts og kør i determineret rækkefølge
+# Debug: se scripts og kÃ¸r i determineret rÃ¦kkefÃ¸lge
 echo "Scripts in /scripts:"
 ls -la /scripts || true
 
 # Opret DB
 $SQLCMD -S tcp:db,1433 -U sa -P "$SA_PASSWORD" -Q "IF DB_ID('CerealDb') IS NULL CREATE DATABASE CerealDb;"
 
-# Kør filer hvis de findes – justér rækkefølge/filnavne til dine faktiske navne
+# KÃ¸r filer hvis de findes â€“ justÃ©r rÃ¦kkefÃ¸lge/filnavne til dine faktiske navne
 for f in \
   "/scripts/Create Table.sql" \
   "/scripts/Create User Table.sql" \
