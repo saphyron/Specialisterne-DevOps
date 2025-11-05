@@ -34,17 +34,28 @@ jobs:
       - name: Build API (Release, net9.0)
         run: dotnet build "Cereal API/Cereal API/Cereal API.csproj" -c Release
 
-      # Quick sanity check that DLL exists (fail fast if not)
-      - name: Verify build outputs
+            # Kopiér build-output til docs/assemblies (så DocFX ser dem inde i docset)
+      - name: Prepare assemblies for DocFX
         shell: pwsh
         run: |
-          $dll = "Cereal API/Cereal API/bin/Release/net9.0/Cereal API.dll"
-          if (-not (Test-Path $dll)) { Write-Error "DLL not found: $dll"; exit 1 }
-          Write-Host "Found: $dll"
+          New-Item -ItemType Directory -Force -Path docs/assemblies | Out-Null
+          Copy-Item -LiteralPath "Cereal API/Cereal API/bin/Release/net9.0/Cereal API.dll" -Destination "docs/assemblies/" -Force
+          if (Test-Path "Cereal API/Cereal API/bin/Release/net9.0/Cereal API.xml") {
+            Copy-Item -LiteralPath "Cereal API/Cereal API/bin/Release/net9.0/Cereal API.xml" -Destination "docs/assemblies/" -Force
+          }
+          Get-ChildItem docs/assemblies
 
-      # 2) Install DocFX (local tool) and generate metadata from the DLL (assembly-mode)
+      # (valgfrit) fail fast hvis DLL ikke blev kopieret
+      - name: Verify assemblies exist in docset
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "docs/assemblies/Cereal API.dll")) {
+            Write-Error "docs/assemblies/Cereal API.dll not found"; exit 1
+          }
+
       - name: Install DocFX (dotnet tool)
         run: dotnet tool install docfx --tool-path .\.tools
+
 
       - name: DocFX metadata (assembly-mode → docs/api)
         run: .\.tools\docfx metadata docs\docfx.json --logLevel info

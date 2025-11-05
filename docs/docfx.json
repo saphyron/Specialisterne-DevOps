@@ -2,10 +2,7 @@
   "metadata": [
     {
       "src": [
-        {
-          "cwd": "..",
-          "files": [ "Cereal API/Cereal API/bin/**/net9.0/Cereal API.dll" ]
-        }
+        { "files": [ "assemblies/*.dll" ] }
       ],
       "dest": "api",
       "disableGitFeatures": false
@@ -16,8 +13,6 @@
       { "files": [ "index.md", "toc.yml", "articles/**.md" ] },
       { "files": [ "api/**.yml" ], "sidetoc": true }
     ],
-    "resource": [ { "files": [ "images/**" ] } ],
-    "overwrite": [],
     "dest": "_site",
     "globalMetadata": { "site_name": "Cereal API Docs" },
     "xrefService": [ "https://xref.docs.microsoft.com/query?uid={uid}" ],
