@@ -32,6 +32,7 @@ Legend (kort):
 📁 Specialisterne-DevOps
 ├─ 📁 .github
 │  └─ 📁 workflows
+│     ├─ 🧪 docs.yml
 │     └─ 🧪 ci.yml
 ├─ 📁 Cereal API
 │  ├─ 🪪 Cereal API.slnx
@@ -84,7 +85,14 @@ Legend (kort):
 │     │  └─ 📁 Logs  (tom, i .gitignore)
 │     └─ 🙈 .gitignore
 ├─ 📁 Scripts
+│  ├─ 🛠️ Build-Docs.ps1
 │  └─ 🛠️ RunDocker.ps1
+├─ 📁 docs
+│  ├─ 🧾 index.md
+│  ├─ ⚙️ docfx.json
+│  ├─ 🧪 toc.yml
+│  └─ 📁 articles
+│      └─ 🧾 getting-started.md
 ├─ 📁 docker
 │  └─ 🐚 db-init.sh
 ├─ 🐳 docker-compose.yml
