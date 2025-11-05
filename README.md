@@ -21,8 +21,6 @@ Der er tilføjet **Swagger/OpenAPI**, en CI-venlig **Smoketest.CI.ps1** (PowerSh
 
 ## Projektstruktur
 
-> Bemærk: mappen for workflows er **`.github/workflows/`** (flertal).
-
 ```text
 Legend (kort): 
 📁 mappe • 🧩 C#-kode • ⚙️ config/json/yaml • 🪪 .sln/.csproj • 🧾 README/MD • 📑 CSV • 📊 Excel
