@@ -47,7 +47,8 @@ jobs:
         run: dotnet tool install docfx --tool-path .\.tools
 
       - name: DocFX metadata (assembly-mode → docs/api)
-        run: .\.tools\docfx metadata "Cereal API/Cereal API/bin/Release/net9.0/Cereal API.dll" -o docs\api -v n
+        run: .\.tools\docfx metadata "Cereal API/Cereal API/bin/Release/net9.0/Cereal API.dll" --output docs\api --logLevel info
+
 
       # Fail if docs/api is empty
       - name: Verify API YAML generated
