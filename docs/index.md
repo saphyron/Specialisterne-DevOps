@@ -9,4 +9,4 @@ Velkommen til dokumentationen for Cereal API.
 
 ## Indhold
 - [Kom i gang](articles/getting-started.md)
-- [API Reference](api/)
+- [API Reference](api/CerealAPI.Data.html)
