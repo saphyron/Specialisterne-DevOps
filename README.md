@@ -183,10 +183,10 @@ Workflow: **`.github/workflows/ci.yml`**
 * `CRUD_PASSWORD` – kodeord til applikationens DB-bruger.
 * `JWT_SECRET` – hemmelig nøgle til JWT-signering.
 
-### Required checks (branch-regler) – forslag
+### Required checks (branch-regler)
 
 * Kræv, at **ci** (workflow) er **grøn**, før PR kan merges.
-* Kræv **review** + **linear history** (squash/rebase), hvis ønsket.
+* Kræv **review** + **linear history** (squash/rebase).
 
 ---
 
